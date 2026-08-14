@@ -1,0 +1,21 @@
+{
+  "name": "cosec-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs inside the office network, calls COSEC directly, and relays raw responses to the cloud-hosted COSEC Attendance Dashboard.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "full-sync": "tsx src/index.ts --full-sync"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4.23.12",
+    "typescript": "^5"
+  }
+}

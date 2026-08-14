@@ -1,0 +1,183 @@
+// Prisma schema for the COSEC Attendance Dashboard.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Dashboard login user (Phase 1 auth is a small set of admin users, not COSEC/Frappe accounts).
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
+// Employee directory, derived/upserted from COSEC attendance + event syncs.
+model Employee {
+  id           String    @id @default(cuid())
+  cosecUserId  String    @unique
+  name         String
+  firstSeenAt  DateTime?
+  lastSeenAt   DateTime?
+  totalPunches Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("employees")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  INCOMPLETE
+  UNKNOWN
+}
+
+// Mirrors the V2/attendance-daily pipe-delimited rows.
+model AttendanceRecord {
+  id           String           @id @default(cuid())
+  cosecUserId  String
+  employeeName String
+  processDate  DateTime         @db.Date
+  punchIn      DateTime?
+  punchOut     DateTime?
+  // Stored as raw COSEC text (not Int) since only "0" has ever been observed for these
+  // columns so far — keeping them as text avoids a sync failure if COSEC ever returns
+  // a non-numeric shape (e.g. "HH:mm") for LateIn/EarlyOut/Overtime/WorkTime/WorkingShift.
+  workingShift String?
+  lateIn       String?
+  earlyOut     String?
+  overtime     String?
+  workTime     String?
+  status       AttendanceStatus @default(UNKNOWN)
+  rawData      String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([cosecUserId, processDate])
+  @@index([processDate])
+  @@map("attendance_records")
+}
+
+// Mirrors V2/event-ta(-date) pipe-delimited rows.
+model EventRecord {
+  id                 String    @id @default(cuid())
+  indexNo             BigInt    @unique
+  cosecUserId          String
+  employeeName          String
+  eventDateTime          DateTime
+  entryExitType           Int
+  masterControllerId       Int
+  doorControllerId          Int
+  specialFunctionId          Int
+  // Raw text: always empty in every sample seen so far, real format unconfirmed.
+  leaveDateTime               String?
+  // NOTE: COSEC's IDateTime column uses MM/DD/YYYY (US order), unlike every other
+  // COSEC timestamp column which uses DD/MM/YYYY. See lib/cosec/dates.ts.
+  idatetime                    DateTime
+  rawData                       String
+  createdAt                      DateTime @default(now())
+
+  @@index([eventDateTime])
+  @@index([cosecUserId])
+  @@map("event_records")
+}
+
+enum SyncSource {
+  ATTENDANCE_DAILY
+  EVENT_TA_DATE
+  EVENT_TA
+}
+
+enum SyncStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+model CosecSyncLog {
+  id             String     @id @default(cuid())
+  syncId         String     @unique @default(cuid())
+  source         SyncSource
+  startTime      DateTime   @default(now())
+  endTime        DateTime?
+  status         SyncStatus @default(RUNNING)
+  recordsFetched Int        @default(0)
+  recordsCreated Int        @default(0)
+  recordsUpdated Int        @default(0)
+  recordsSkipped Int        @default(0)
+  recordsFailed  Int        @default(0)
+  errorMessage   String?
+  // True when this sync's raw COSEC response was relayed by /agent/cosec-agent
+  // (Mode B) rather than fetched directly by this app (Mode A).
+  viaAgent       Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+
+  @@index([source, createdAt])
+  @@map("cosec_sync_logs")
+}
+
+// Optional DB override for COSEC/Frappe connection config (Settings page).
+// Secret values (COSEC password, Frappe API secret) are AES-256-GCM encrypted
+// before being written here — see lib/crypto.ts. Absence of a row for a given
+// key means "fall back to the environment variable".
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+enum EmployeeMappingStatus {
+  UNMAPPED
+  MAPPED
+}
+
+// COSEC User ID <-> Frappe Employee mapping. Confirming a mapping also writes
+// cosecUserId into that Frappe Employee's attendance_device_id field (Frappe
+// HR's own biometric-device-ID field), so future syncs become an exact match.
+model EmployeeMapping {
+  id                 String                @id @default(cuid())
+  cosecUserId        String                @unique
+  frappeEmployeeId   String?
+  frappeEmployeeName String?
+  status             EmployeeMappingStatus @default(UNMAPPED)
+  mappedAt           DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@map("employee_mappings")
+}
+
+enum FrappeSyncSource {
+  CHECKIN_SYNC
+}
+
+model FrappeSyncLog {
+  id             String           @id @default(cuid())
+  syncId         String           @unique @default(cuid())
+  source         FrappeSyncSource
+  startTime      DateTime         @default(now())
+  endTime        DateTime?
+  status         SyncStatus       @default(RUNNING)
+  recordsFetched Int              @default(0)
+  recordsCreated Int              @default(0)
+  recordsSkipped Int              @default(0)
+  recordsFailed  Int              @default(0)
+  errorMessage   String?
+  createdAt      DateTime         @default(now())
+
+  @@index([source, createdAt])
+  @@map("frappe_sync_logs")
+}

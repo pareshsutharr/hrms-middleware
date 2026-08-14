@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cosec-attendance-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cosec
+      POSTGRES_PASSWORD: cosec
+      POSTGRES_DB: cosec_attendance
+    ports:
+      # Host port 5433 to avoid clashing with a native Postgres install on 5432.
+      # If you use this, point DATABASE_URL at localhost:5433 instead.
+      - "5433:5432"
+    volumes:
+      - cosec_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  cosec_postgres_data:
