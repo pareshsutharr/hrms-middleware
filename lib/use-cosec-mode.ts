@@ -21,7 +21,7 @@ export function useCosecMode(): CosecModeStatus {
     console.log("[useCosecMode] effect running");
     let cancelled = false;
 
-    fetch("/api/health")
+    fetch("/api/health", { cache: "no-store" })
       .then((r) => {
         console.log("[useCosecMode] fetch resolved", r.status);
         return r.json();
