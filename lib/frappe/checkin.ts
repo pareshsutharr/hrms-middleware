@@ -3,6 +3,7 @@ import { getFrappeClient } from "./config";
 import { FrappeError } from "./errors";
 import { toIst, nowInIst } from "@/lib/cosec/dates";
 import { logger } from "@/lib/logger";
+import { sendMail } from "@/lib/email/mailer";
 import { FrappeSyncSource, SyncStatus, EmployeeMappingStatus } from "@/lib/generated/prisma/client";
 
 export interface FrappeSyncSummary {
@@ -29,6 +30,23 @@ const EXCLUDED_SHIFT_TYPES = new Set(["Open Attendence"]);
 
 function formatFrappeDateTime(date: Date): string {
   return toIst(date).toFormat("yyyy-MM-dd HH:mm:ss");
+}
+
+/** Emails the outcome of every push attempt (success, partial, or failed) — see README "Automatic Frappe push". */
+async function notifySyncResult(summary: FrappeSyncSummary, from: Date, to: Date): Promise<void> {
+  const subject = `[COSEC to Frappe] ${summary.status}: ${summary.recordsCreated} created, ${summary.recordsFailed} failed`;
+  const text = [
+    `Status: ${summary.status}`,
+    `Range: ${formatFrappeDateTime(from)} to ${formatFrappeDateTime(to)} (IST)`,
+    `Fetched: ${summary.recordsFetched}`,
+    `Created: ${summary.recordsCreated}`,
+    `Skipped: ${summary.recordsSkipped}`,
+    `Failed: ${summary.recordsFailed}`,
+    summary.errorMessage ? `Error: ${summary.errorMessage}` : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+  await sendMail({ subject, text });
 }
 
 /** Frappe employee IDs (from the given list) whose default_shift is in EXCLUDED_SHIFT_TYPES. */
@@ -160,7 +178,9 @@ export async function syncCheckinsToFrappe(from: Date, to: Date): Promise<Frappe
       data: { status, endTime: new Date(), recordsFetched, recordsCreated, recordsSkipped, recordsFailed },
     });
 
-    return { syncId: log.syncId, status, recordsFetched, recordsCreated, recordsSkipped, recordsFailed };
+    const summary = { syncId: log.syncId, status, recordsFetched, recordsCreated, recordsSkipped, recordsFailed };
+    await notifySyncResult(summary, from, to);
+    return summary;
   } catch (err) {
     const errorMessage =
       err instanceof FrappeError ? err.message : err instanceof Error ? err.message : "Unknown sync error";
@@ -176,7 +196,7 @@ export async function syncCheckinsToFrappe(from: Date, to: Date): Promise<Frappe
         errorMessage,
       },
     });
-    return {
+    const summary = {
       syncId: log.syncId,
       status: SyncStatus.FAILED,
       recordsFetched,
@@ -185,6 +205,8 @@ export async function syncCheckinsToFrappe(from: Date, to: Date): Promise<Frappe
       recordsFailed,
       errorMessage,
     };
+    await notifySyncResult(summary, from, to);
+    return summary;
   }
 }
 
