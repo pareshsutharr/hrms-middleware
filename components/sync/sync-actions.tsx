@@ -75,6 +75,7 @@ export function SyncActions() {
 
   return (
     <div className="space-y-4 rounded-lg border bg-card p-4">
+      <p data-testid="debug-mode">{JSON.stringify(mode)}</p>
       {directUnavailable && (
         <p className="rounded-md border border-muted bg-muted/50 p-3 text-sm text-muted-foreground">
           Manual sync needs a direct COSEC connection, which this deployment doesn&apos;t have — COSEC data arrives
