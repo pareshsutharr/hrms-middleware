@@ -18,6 +18,11 @@ interface CosecConfig {
   passwordSource: "override" | "env";
 }
 
+interface ModeStatus {
+  direct: "connected" | "error" | "checking";
+  agent: "connected" | "error" | "not_configured" | "checking";
+}
+
 export function CosecConfigForm() {
   const [config, setConfig] = useState<CosecConfig | null>(null);
   const [baseUrl, setBaseUrl] = useState("");
@@ -27,6 +32,7 @@ export function CosecConfigForm() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [mode, setMode] = useState<ModeStatus>({ direct: "checking", agent: "checking" });
 
   useEffect(() => {
     fetch("/api/config/cosec")
@@ -39,6 +45,18 @@ export function CosecConfigForm() {
         }
       })
       .finally(() => setLoading(false));
+
+    fetch("/api/health")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) {
+          setMode({
+            direct: json.data.cosec?.status === "connected" ? "connected" : "error",
+            agent: json.data.agent?.status ?? "not_configured",
+          });
+        }
+      })
+      .catch(() => setMode({ direct: "error", agent: "not_configured" }));
   }, []);
 
   async function handleSave() {
@@ -103,10 +121,28 @@ export function CosecConfigForm() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted-foreground">Connection Mode</span>
-          <Badge variant="outline">Direct (Local Network)</Badge>
-          <span className="text-xs text-muted-foreground">Agent-based mode ships in Phase 3.</span>
+          <span className="text-sm text-muted-foreground">Direct connection</span>
+          <Badge variant={mode.direct === "connected" ? "default" : "destructive"}>
+            {mode.direct === "checking" ? "Checking…" : mode.direct === "connected" ? "Reachable" : "Unreachable"}
+          </Badge>
+          <span className="text-sm text-muted-foreground">Agent relay</span>
+          <Badge variant={mode.agent === "connected" ? "default" : mode.agent === "error" ? "destructive" : "outline"}>
+            {mode.agent === "checking"
+              ? "Checking…"
+              : mode.agent === "connected"
+                ? "Connected"
+                : mode.agent === "error"
+                  ? "Not reporting"
+                  : "Not set up"}
+          </Badge>
         </div>
+        <p className="text-xs text-muted-foreground">
+          On a cloud deployment (Vercel etc.), Direct will normally show Unreachable — the COSEC device is on a
+          private LAN and the cloud can&apos;t reach it directly. That&apos;s expected, not an error: Agent relay
+          (see <code className="rounded bg-muted px-1 py-0.5">/agent/cosec-agent</code>) is what actually gets COSEC
+          data into this deployment when Direct isn&apos;t possible. Self-hosting on the same network as the device
+          instead makes Direct the one that matters.
+        </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
