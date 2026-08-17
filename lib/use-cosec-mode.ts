@@ -18,22 +18,30 @@ export function useCosecMode(): CosecModeStatus {
   const [mode, setMode] = useState<CosecModeStatus>({ direct: "checking", agent: "checking" });
 
   useEffect(() => {
+    console.log("[useCosecMode] effect running");
     let cancelled = false;
 
     fetch("/api/health")
-      .then((r) => r.json())
+      .then((r) => {
+        console.log("[useCosecMode] fetch resolved", r.status);
+        return r.json();
+      })
       .then((json) => {
+        console.log("[useCosecMode] json parsed", JSON.stringify(json), "cancelled=", cancelled);
         if (cancelled || !json.success) return;
         setMode({
           direct: json.data.cosec?.status === "connected" ? "connected" : "error",
           agent: json.data.agent?.status ?? "not_configured",
         });
+        console.log("[useCosecMode] setMode called");
       })
-      .catch(() => {
+      .catch((err) => {
+        console.log("[useCosecMode] caught error", err);
         if (!cancelled) setMode({ direct: "error", agent: "not_configured" });
       });
 
     return () => {
+      console.log("[useCosecMode] cleanup, cancelled=true");
       cancelled = true;
     };
   }, []);
