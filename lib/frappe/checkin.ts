@@ -96,6 +96,38 @@ async function fetchAlreadySyncedIndexNos(from: Date, to: Date): Promise<Set<str
 }
 
 /**
+ * COSEC's entryExitType field turned out unreliable on this device: it's a
+ * single-reader setup, and of every event ever recorded, all but one carry
+ * entryExitType=0 — the sole exception required a rarely-used function-key
+ * press before badging. So direction can't come from the device; instead it's
+ * inferred by alternating IN/OUT per employee per IST day, ordered by time
+ * (1st punch of the day = IN, 2nd = OUT, 3rd = IN, ...). Starting parity has
+ * to account for checkins already synced from prior runs, hence this counts
+ * existing Employee Checkin rows in [from, to] before any new ones are pushed.
+ */
+async function fetchCheckinCountsByEmployeeDay(from: Date, to: Date): Promise<Map<string, number>> {
+  const client = await getFrappeClient();
+  const filters = encodeURIComponent(
+    JSON.stringify([
+      ["time", ">=", formatFrappeDateTime(from)],
+      ["time", "<=", formatFrappeDateTime(to)],
+    ])
+  );
+  const fields = encodeURIComponent(JSON.stringify(["employee", "time"]));
+  const result = await client.get<{ data: { employee: string; time: string }[] }>(
+    `/api/resource/${encodeURIComponent(EMPLOYEE_CHECKIN_DOCTYPE)}?filters=${filters}&fields=${fields}&limit_page_length=0`
+  );
+
+  const counts = new Map<string, number>();
+  for (const row of result.data) {
+    const dateKey = row.time.slice(0, 10);
+    const key = `${row.employee}|${dateKey}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
  * Pushes COSEC punches into Frappe as Employee Checkin records, for mapped
  * employees only, within [from, to]. Deliberately does not touch Attendance
  * directly — whether Frappe derives Attendance from these checkins depends
@@ -129,6 +161,7 @@ export async function syncCheckinsToFrappe(from: Date, to: Date): Promise<Frappe
       const excludedFrappeEmployeeIds = await fetchExcludedFrappeEmployeeIds(
         Array.from(new Set(frappeIdByCosecUserId.values()))
       );
+      const checkinCounts = await fetchCheckinCountsByEmployeeDay(from, to);
       const client = await getFrappeClient();
 
       for (const event of events) {
@@ -149,16 +182,17 @@ export async function syncCheckinsToFrappe(from: Date, to: Date): Promise<Frappe
           continue;
         }
 
-        // Inferred from the field name (0=IN, 1=OUT) — no confirmed OUT-type
-        // sample seen yet. Anything else is left unset rather than guessed;
-        // log_type is optional on Employee Checkin.
-        const logType = event.entryExitType === 0 ? "IN" : event.entryExitType === 1 ? "OUT" : undefined;
+        const dateKey = toIst(event.eventDateTime).toFormat("yyyy-MM-dd");
+        const countKey = `${frappeEmployeeId}|${dateKey}`;
+        const punchNumber = (checkinCounts.get(countKey) ?? 0) + 1;
+        checkinCounts.set(countKey, punchNumber);
+        const logType = punchNumber % 2 === 1 ? "IN" : "OUT";
 
         try {
           await client.post(`/api/resource/${encodeURIComponent(EMPLOYEE_CHECKIN_DOCTYPE)}`, {
             employee: frappeEmployeeId,
             time: formatFrappeDateTime(event.eventDateTime),
-            ...(logType ? { log_type: logType } : {}),
+            log_type: logType,
             device_id: `COSEC-${indexNoStr}`,
           });
           recordsCreated += 1;
