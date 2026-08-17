@@ -46,7 +46,10 @@ export function CosecConfigForm() {
       })
       .finally(() => setLoading(false));
 
-    fetch("/api/health")
+    // no-store: /api/health is slow (~10s) and the header fetches it
+    // concurrently too — without this, the browser can leave this second
+    // identical in-flight request hanging forever instead of resolving.
+    fetch("/api/health", { cache: "no-store" })
       .then((r) => r.json())
       .then((json) => {
         if (json.success) {

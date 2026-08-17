@@ -24,9 +24,15 @@ export function ConnectionStatus() {
 
     async function load() {
       try {
+        // no-store matters: /api/health is slow (~10s, waits for a real
+        // COSEC timeout) and other components on the same page fetch it
+        // concurrently — without this, the browser's default cache handling
+        // can leave a second identical in-flight request hanging forever.
         const [health, logs] = await Promise.all([
-          fetch("/api/health").then((r) => r.json() as Promise<HealthResponse>),
-          fetch("/api/sync/logs?page=1&pageSize=1").then((r) => r.json() as Promise<SyncLogsResponse>),
+          fetch("/api/health", { cache: "no-store" }).then((r) => r.json() as Promise<HealthResponse>),
+          fetch("/api/sync/logs?page=1&pageSize=1", { cache: "no-store" }).then(
+            (r) => r.json() as Promise<SyncLogsResponse>
+          ),
         ]);
         if (cancelled) return;
         // Two independent ways COSEC data can be reaching this deployment —
