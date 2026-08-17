@@ -7,11 +7,19 @@ export const dynamic = "force-dynamic";
 export default async function HealthPage() {
   const health = await getSystemHealth();
 
+  // When Direct COSEC access works (self-hosted on the LAN, "Mode A"), the
+  // Agent is simply unused — its own status shouldn't read as an error here.
+  // It only actually matters when Direct is unreachable ("Mode B").
+  const directWorks = health.cosec.status === "connected";
+  const agentDisplay = directWorks
+    ? { status: "not_configured" as const, message: "Not needed — Direct COSEC connection is active on this deployment." }
+    : health.agent;
+
   const items = [
     { key: "cosec", label: "COSEC", detail: "Connection, authentication, attendance & event API", ...health.cosec },
     { key: "database", label: "Database", detail: "PostgreSQL connection", ...health.database },
     { key: "frappe", label: "Frappe HRMS", detail: "Employee, Checkin & Attendance API", ...health.frappe },
-    { key: "agent", label: "COSEC Agent", detail: "Local network connector heartbeat", ...health.agent },
+    { key: "agent", label: "COSEC Agent", detail: "Local network connector heartbeat", ...agentDisplay },
   ];
 
   return (
