@@ -82,6 +82,10 @@ export function CosecConfigForm() {
     }
   }
 
+  // Direct failing is expected (not alarming) whenever Agent relay is
+  // covering for it — COSEC data is still reaching this deployment fine.
+  const directFailureIsExpected = mode.agent === "connected";
+
   async function handleTest() {
     setTesting(true);
     setTestResult(null);
@@ -90,12 +94,21 @@ export function CosecConfigForm() {
       const json = await res.json();
       if (!json.success) throw new Error(json.error?.message ?? "Test failed");
       setTestResult(json.data);
-      if (json.data.success) toast.success(json.data.message);
-      else toast.error(json.data.message);
+      if (json.data.success) {
+        toast.success(json.data.message);
+      } else if (directFailureIsExpected) {
+        toast.info(`${json.data.message} — expected here, Agent relay is delivering COSEC data instead.`);
+      } else {
+        toast.error(json.data.message);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Test failed";
       setTestResult({ success: false, message });
-      toast.error(message);
+      if (directFailureIsExpected) {
+        toast.info(`${message} — expected here, Agent relay is delivering COSEC data instead.`);
+      } else {
+        toast.error(message);
+      }
     } finally {
       setTesting(false);
     }
@@ -122,8 +135,18 @@ export function CosecConfigForm() {
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">Direct connection</span>
-          <Badge variant={mode.direct === "connected" ? "default" : "destructive"}>
-            {mode.direct === "checking" ? "Checking…" : mode.direct === "connected" ? "Reachable" : "Unreachable"}
+          <Badge
+            variant={
+              mode.direct === "connected" ? "default" : directFailureIsExpected ? "outline" : "destructive"
+            }
+          >
+            {mode.direct === "checking"
+              ? "Checking…"
+              : mode.direct === "connected"
+                ? "Reachable"
+                : directFailureIsExpected
+                  ? "Unreachable (expected)"
+                  : "Unreachable"}
           </Badge>
           <span className="text-sm text-muted-foreground">Agent relay</span>
           <Badge variant={mode.agent === "connected" ? "default" : mode.agent === "error" ? "destructive" : "outline"}>
@@ -185,11 +208,18 @@ export function CosecConfigForm() {
             className={`flex items-center gap-2 rounded-md border p-3 text-sm ${
               testResult.success
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                : "border-destructive/30 bg-destructive/10 text-destructive"
+                : directFailureIsExpected
+                  ? "border-muted bg-muted/50 text-muted-foreground"
+                  : "border-destructive/30 bg-destructive/10 text-destructive"
             }`}
           >
             {testResult.success ? <Wifi className="size-4" /> : <WifiOff className="size-4" />}
-            {testResult.message}
+            <span>
+              {testResult.message}
+              {!testResult.success && directFailureIsExpected && (
+                <> — expected here; Agent relay is delivering COSEC data instead.</>
+              )}
+            </span>
           </div>
         )}
       </CardContent>
