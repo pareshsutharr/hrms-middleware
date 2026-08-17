@@ -7,7 +7,9 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { istToday as isoToday } from "@/lib/client-dates";
+import { istToday as isoToday, istDaysAgo as isoDaysAgo } from "@/lib/client-dates";
+
+const CATCH_UP_DAYS = 90;
 
 async function postJson(url: string, body: unknown) {
   const res = await fetch(url, {
@@ -47,6 +49,21 @@ export function FrappeSyncActions() {
         <Button onClick={() => runSync("Sync Today", isoToday(), isoToday())} disabled={busy !== null}>
           <RefreshCw className={`size-4 ${busy === "Sync Today" ? "animate-spin" : ""}`} /> Sync Today
         </Button>
+        <Button
+          variant="outline"
+          onClick={() => runSync("Sync Yesterday", isoDaysAgo(1), isoDaysAgo(1))}
+          disabled={busy !== null}
+        >
+          <RefreshCw className={`size-4 ${busy === "Sync Yesterday" ? "animate-spin" : ""}`} /> Sync Yesterday
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => runSync("Push Unsynced", isoDaysAgo(CATCH_UP_DAYS), isoToday())}
+          disabled={busy !== null}
+        >
+          <RefreshCw className={`size-4 ${busy === "Push Unsynced" ? "animate-spin" : ""}`} /> Push Unsynced (last{" "}
+          {CATCH_UP_DAYS}d)
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -80,7 +97,10 @@ export function FrappeSyncActions() {
       </div>
       <p className="text-xs text-muted-foreground">
         Only mapped employees are synced. Re-running a range is safe — already-synced punches are skipped, and any
-        that failed last time are retried automatically since they never got created in Frappe.
+        that failed last time are retried automatically since they never got created in Frappe.{" "}
+        <strong>Push Unsynced</strong> re-checks the last {CATCH_UP_DAYS} days for anything not yet in Frappe (e.g.
+        a punch that arrived while the agent was offline, or an employee mapped after their punch already existed)
+        and pushes just that — safe to click anytime, it only ever fills gaps, never duplicates.
       </p>
     </div>
   );
