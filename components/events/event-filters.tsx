@@ -7,6 +7,7 @@ import { RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCosecMode } from "@/lib/use-cosec-mode";
 
 interface Props {
   defaultFrom: string;
@@ -21,6 +22,8 @@ export function EventFilters({ defaultFrom, defaultTo, defaultUserId, defaultEmp
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [syncing, setSyncing] = useState(false);
+  const mode = useCosecMode();
+  const directUnavailable = mode.direct === "error" && mode.agent === "connected";
 
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
@@ -101,7 +104,16 @@ export function EventFilters({ defaultFrom, defaultTo, defaultUserId, defaultEmp
       <Button onClick={navigate}>
         <Search className="size-4" /> Search
       </Button>
-      <Button variant="outline" onClick={handleSync} disabled={syncing}>
+      <Button
+        variant="outline"
+        onClick={handleSync}
+        disabled={syncing || directUnavailable}
+        title={
+          directUnavailable
+            ? "Needs a direct COSEC connection, which this deployment doesn't have — data arrives automatically via the Agent relay instead."
+            : undefined
+        }
+      >
         <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} /> Sync
       </Button>
     </div>

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { istToday as isoToday, istDaysAgo as isoDaysAgo, istStartOfWeek as startOfWeekIso, istStartOfMonth as startOfMonthIso } from "@/lib/client-dates";
+import { useCosecMode } from "@/lib/use-cosec-mode";
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "All statuses" },
@@ -43,6 +44,8 @@ export function AttendanceFilters({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [syncing, setSyncing] = useState(false);
+  const mode = useCosecMode();
+  const directUnavailable = mode.direct === "error" && mode.agent === "connected";
 
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
@@ -139,7 +142,16 @@ export function AttendanceFilters({
         <Button onClick={() => navigate()}>
           <Search className="size-4" /> Search
         </Button>
-        <Button variant="outline" onClick={handleSync} disabled={syncing}>
+        <Button
+          variant="outline"
+          onClick={handleSync}
+          disabled={syncing || directUnavailable}
+          title={
+            directUnavailable
+              ? "Needs a direct COSEC connection, which this deployment doesn't have — data arrives automatically via the Agent relay instead."
+              : undefined
+          }
+        >
           <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} /> Sync
         </Button>
       </div>

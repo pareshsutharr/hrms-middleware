@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { istToday as isoToday, istDaysAgo as isoDaysAgo } from "@/lib/client-dates";
+import { useCosecMode } from "@/lib/use-cosec-mode";
 
 async function postJson(url: string, body: unknown) {
   const res = await fetch(url, {
@@ -35,6 +36,10 @@ export function SyncActions() {
   const [fullSyncOpen, setFullSyncOpen] = useState(false);
   const [rangeFrom, setRangeFrom] = useState(isoToday());
   const [rangeTo, setRangeTo] = useState(isoToday());
+  const mode = useCosecMode();
+  // These buttons hit COSEC directly — pointless to offer them when Direct
+  // is known-unreachable and the Agent is already relaying data instead.
+  const directUnavailable = mode.direct === "error" && mode.agent === "connected";
 
   async function runRangeSync(label: string, from: string, to: string) {
     setBusy(label);
@@ -70,20 +75,33 @@ export function SyncActions() {
 
   return (
     <div className="space-y-4 rounded-lg border bg-card p-4">
+      {directUnavailable && (
+        <p className="rounded-md border border-muted bg-muted/50 p-3 text-sm text-muted-foreground">
+          Manual sync needs a direct COSEC connection, which this deployment doesn&apos;t have — COSEC data arrives
+          automatically instead via the Agent relay (see Settings &gt; COSEC). These buttons are disabled here, not
+          broken.
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => runRangeSync("Sync Today", isoToday(), isoToday())} disabled={busy !== null}>
+        <Button
+          onClick={() => runRangeSync("Sync Today", isoToday(), isoToday())}
+          disabled={busy !== null || directUnavailable}
+        >
           <RefreshCw className={`size-4 ${busy === "Sync Today" ? "animate-spin" : ""}`} /> Sync Today
         </Button>
         <Button
           variant="outline"
           onClick={() => runRangeSync("Sync Yesterday", isoDaysAgo(1), isoDaysAgo(1))}
-          disabled={busy !== null}
+          disabled={busy !== null || directUnavailable}
         >
           <RefreshCw className={`size-4 ${busy === "Sync Yesterday" ? "animate-spin" : ""}`} /> Sync Yesterday
         </Button>
 
         <Dialog open={fullSyncOpen} onOpenChange={setFullSyncOpen}>
-          <DialogTrigger className={buttonVariants({ variant: "destructive" })} disabled={busy !== null}>
+          <DialogTrigger
+            className={buttonVariants({ variant: "destructive" })}
+            disabled={busy !== null || directUnavailable}
+          >
             <RefreshCw className={`size-4 ${busy === "full" ? "animate-spin" : ""}`} /> Full Sync
           </DialogTrigger>
           <DialogContent>
@@ -118,7 +136,7 @@ export function SyncActions() {
         <Button
           variant="secondary"
           onClick={() => runRangeSync("Sync Date Range", rangeFrom, rangeTo)}
-          disabled={busy !== null}
+          disabled={busy !== null || directUnavailable}
         >
           <RefreshCw className={`size-4 ${busy === "Sync Date Range" ? "animate-spin" : ""}`} /> Sync Date Range
         </Button>
