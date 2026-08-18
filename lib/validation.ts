@@ -63,3 +63,9 @@ export const emailConfigBodySchema = z.object({
 export const emailTestBodySchema = z.object({
   recipientEmail: z.string().trim().email(),
 });
+
+export const createUserBodySchema = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  name: z.string().trim().min(1).optional(),
+});
