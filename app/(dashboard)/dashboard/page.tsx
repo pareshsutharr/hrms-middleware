@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { nowInIst, toUtcDateOnly } from "@/lib/cosec/dates";
+import { nowInIst, toUtcDateOnly, parseIsoDateOnly, toIst } from "@/lib/cosec/dates";
 import { formatIstTime, formatIstDateTime } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { SyncStatusBadge } from "@/components/shared/sync-status-badge";
+import { DashboardDateFilter } from "@/components/dashboard/dashboard-date-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -13,14 +14,25 @@ function isNonZero(value: string | null): boolean {
   return Boolean(value && value !== "0");
 }
 
-export default async function DashboardPage() {
-  const todayIst = nowInIst();
-  const today = toUtcDateOnly(todayIst);
-  const todayIso = todayIst.toISODate();
+interface DashboardSearchParams {
+  date?: string;
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<DashboardSearchParams>;
+}) {
+  const sp = await searchParams;
+  const todayIso = nowInIst().toISODate() as string;
+  const selectedIso = sp.date || todayIso;
+  const isToday = selectedIso === todayIso;
+  const selectedDate = parseIsoDateOnly(selectedIso) ?? toUtcDateOnly(nowInIst());
+  const selectedIst = toIst(selectedDate);
 
   const [totalEmployees, todaysRecords, recentSyncs] = await Promise.all([
     db.employee.count(),
-    db.attendanceRecord.findMany({ where: { processDate: today }, orderBy: { punchIn: "desc" } }),
+    db.attendanceRecord.findMany({ where: { processDate: selectedDate }, orderBy: { punchIn: "desc" } }),
     db.cosecSyncLog.findMany({ orderBy: { startTime: "desc" }, take: 5 }),
   ]);
 
@@ -34,20 +46,26 @@ export default async function DashboardPage() {
 
   const cards: { label: string; value: number; href: string }[] = [
     { label: "Total Employees", value: totalEmployees, href: "/employees" },
-    { label: "Present", value: present, href: `/attendance?status=PRESENT&from=${todayIso}&to=${todayIso}` },
-    { label: "Absent", value: absent, href: `/attendance?status=ABSENT&from=${todayIso}&to=${todayIso}` },
-    { label: "Incomplete", value: incomplete, href: `/attendance?status=INCOMPLETE&from=${todayIso}&to=${todayIso}` },
-    { label: "Late", value: late, href: `/attendance?late=true&from=${todayIso}&to=${todayIso}` },
-    { label: "Early Out", value: earlyOut, href: `/attendance?earlyOut=true&from=${todayIso}&to=${todayIso}` },
-    { label: "Overtime", value: overtime, href: `/attendance?overtime=true&from=${todayIso}&to=${todayIso}` },
-    { label: "Unknown", value: unknown, href: `/attendance?status=UNKNOWN&from=${todayIso}&to=${todayIso}` },
+    { label: "Present", value: present, href: `/attendance?status=PRESENT&from=${selectedIso}&to=${selectedIso}` },
+    { label: "Absent", value: absent, href: `/attendance?status=ABSENT&from=${selectedIso}&to=${selectedIso}` },
+    { label: "Incomplete", value: incomplete, href: `/attendance?status=INCOMPLETE&from=${selectedIso}&to=${selectedIso}` },
+    { label: "Late", value: late, href: `/attendance?late=true&from=${selectedIso}&to=${selectedIso}` },
+    { label: "Early Out", value: earlyOut, href: `/attendance?earlyOut=true&from=${selectedIso}&to=${selectedIso}` },
+    { label: "Overtime", value: overtime, href: `/attendance?overtime=true&from=${selectedIso}&to=${selectedIso}` },
+    { label: "Unknown", value: unknown, href: `/attendance?status=UNKNOWN&from=${selectedIso}&to=${selectedIso}` },
   ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Attendance overview for today, {todayIst.toFormat("dd LLLL yyyy")}.</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Attendance overview for {isToday ? "today, " : ""}
+            {selectedIst.toFormat("dd LLLL yyyy")}.
+          </p>
+        </div>
+        <DashboardDateFilter defaultDate={selectedIso} />
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -68,7 +86,7 @@ export default async function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Recent Punches Today</CardTitle>
+            <CardTitle>Recent Punches {isToday ? "Today" : `on ${selectedIst.toFormat("dd LLL yyyy")}`}</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -92,7 +110,7 @@ export default async function DashboardPage() {
                 {todaysRecords.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center text-muted-foreground">
-                      No attendance synced for today yet. Go to Synchronization to fetch it.
+                      No attendance synced for {isToday ? "today" : "this date"} yet. Go to Synchronization to fetch it.
                     </TableCell>
                   </TableRow>
                 )}
