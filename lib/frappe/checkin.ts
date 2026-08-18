@@ -4,6 +4,7 @@ import { FrappeError } from "./errors";
 import { toIst, nowInIst } from "@/lib/cosec/dates";
 import { logger } from "@/lib/logger";
 import { sendMail } from "@/lib/email/mailer";
+import { getEffectiveEmailConfig } from "@/lib/email/config";
 import { FrappeSyncSource, SyncStatus, EmployeeMappingStatus } from "@/lib/generated/prisma/client";
 
 export interface FrappeSyncSummary {
@@ -32,8 +33,20 @@ function formatFrappeDateTime(date: Date): string {
   return toIst(date).toFormat("yyyy-MM-dd HH:mm:ss");
 }
 
-/** Emails the outcome of every push attempt (success, partial, or failed) — see README "Automatic Frappe push". */
+/**
+ * Emails the outcome of a push attempt, gated by the configured frequency
+ * (Settings > Email Alerts — see components/settings/email-alerts-config-form.tsx):
+ * "every" push, only when something changed or failed, only on failure, or off.
+ */
 async function notifySyncResult(summary: FrappeSyncSummary, from: Date, to: Date): Promise<void> {
+  const { recipientEmail, frequency } = await getEffectiveEmailConfig();
+  if (frequency === "off" || !recipientEmail) return;
+
+  const hasFailure = summary.status === SyncStatus.FAILED || summary.status === SyncStatus.PARTIAL;
+  const hasChange = summary.recordsCreated > 0;
+  if (frequency === "failures_only" && !hasFailure) return;
+  if (frequency === "changes_and_failures" && !hasFailure && !hasChange) return;
+
   const subject = `[COSEC to Frappe] ${summary.status}: ${summary.recordsCreated} created, ${summary.recordsFailed} failed`;
   const text = [
     `Status: ${summary.status}`,
@@ -46,7 +59,7 @@ async function notifySyncResult(summary: FrappeSyncSummary, from: Date, to: Date
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
-  await sendMail({ subject, text });
+  await sendMail({ subject, text, to: recipientEmail });
 }
 
 /** Frappe employee IDs (from the given list) whose default_shift is in EXCLUDED_SHIFT_TYPES. */

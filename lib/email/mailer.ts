@@ -28,9 +28,9 @@ function getTransporter(): Transporter | null {
  * break the sync flow that triggered it (same principle as the Frappe push
  * itself being best-effort relative to the agent's own sync response).
  */
-export async function sendMail(opts: { subject: string; text: string }): Promise<void> {
+export async function sendMail(opts: { subject: string; text: string; to?: string }): Promise<void> {
   const t = getTransporter();
-  const to = process.env.ALERT_EMAIL_TO;
+  const to = opts.to || process.env.ALERT_EMAIL_TO;
   if (!t || !to) return;
 
   try {

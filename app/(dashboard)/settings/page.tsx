@@ -1,5 +1,6 @@
 import { CosecConfigForm } from "@/components/settings/cosec-config-form";
 import { FrappeConfigForm } from "@/components/settings/frappe-config-form";
+import { EmailAlertsConfigForm } from "@/components/settings/email-alerts-config-form";
 
 export default function SettingsPage() {
   return (
@@ -10,6 +11,7 @@ export default function SettingsPage() {
       </div>
       <CosecConfigForm />
       <FrappeConfigForm />
+      <EmailAlertsConfigForm />
     </div>
   );
 }

@@ -54,3 +54,12 @@ export const frappeConfigBodySchema = z.object({
   apiKey: z.string().trim().min(1).optional(),
   apiSecret: z.string().min(1).optional(),
 });
+
+export const emailConfigBodySchema = z.object({
+  recipientEmail: z.union([z.string().trim().email(), z.literal("")]).optional(),
+  frequency: z.enum(["every", "changes_and_failures", "failures_only", "off"]).optional(),
+});
+
+export const emailTestBodySchema = z.object({
+  recipientEmail: z.string().trim().email(),
+});
